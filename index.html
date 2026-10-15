@@ -1317,14 +1317,28 @@ body{background:var(--wall);color:var(--ink)}
         for (var q = 0; q < TAPE.length; q++) { var tx2 = -32 + TAPE[q][0] * 0.64, ty2 = -10 + TAPE[q][1] * 0.2; if (q) g.lineTo(tx2, ty2); else g.moveTo(tx2, ty2); }
         g.closePath(); g.fill(); g.restore();
       }
-      if (d.note) drawNote(g, d.note, noteTop, noteBot);
+      if (d.note) drawNote(g, d.note, noteTop, noteBot, sheet);
     }
 
     // a chat line copied by hand: up to three lines of words, the nick smaller underneath
-    // a chat line copied by hand into the blank space above the contacts; if there is no room it goes over the print
-    function drawNote(g, n, top, bot){
-      var maxW = 236 - n.x, words = n.text.split(' '), band = (bot || 0) - (top || 0);
-      function wrap(size){
+    // a chat line copied by hand. It goes into the blank space above the contacts, measured against the real
+    // (possibly torn) paper; where there is no such space it is written smaller over the print, with the paper
+    // showing around the strokes. Nothing is ever drawn past the edge of the sheet.
+    var HIT = null;
+    function onPaper(sheet, x0, x1, y){
+      if (!HIT) HIT = mk(1, 1).getContext('2d');
+      for (var x = x0; x <= x1 + 0.1; x += Math.max(8, (x1 - x0) / 6)) if (!HIT.isPointInPath(sheet, x, y)) return false;
+      return true;
+    }
+    // how far down from y the paper stays whole across [x0, x1]
+    function paperDown(sheet, x0, x1, y, limit){
+      var yy = y;
+      while (yy + 2 <= limit && onPaper(sheet, x0, x1, yy + 2)) yy += 2;
+      return yy;
+    }
+    function drawNote(g, n, top, bot, sheet){
+      var words = n.text.split(' ');
+      function wrap(size, maxW){
         g.font = '600 ' + size.toFixed(1) + 'px ' + F_HAND;
         var lines = [], cur = '';
         for (var i = 0; i < words.length; i++) {
@@ -1332,20 +1346,57 @@ body{background:var(--wall);color:var(--ink)}
           if (cur && g.measureText(test).width > maxW) { lines.push(cur); cur = words[i]; } else cur = test;
         }
         if (cur) lines.push(cur);
-        return lines;
+        var w = 0; for (var j = 0; j < lines.length; j++) w = Math.max(w, g.measureText(lines[j]).width + (j ? 6 : 0));
+        return { lines: lines, w: w };
       }
-      function tall(size, nl){ return nl * size * 0.95 + (n.nick ? size * 0.62 : 0); }
-      var size = n.size, lines = wrap(size);
-      while (size > 13 && (lines.length > 3 || (band > 24 && tall(size, lines.length) > band))) { size *= 0.9; lines = wrap(size); }
-      if (lines.length > 3) lines.length = 3;
-      var lh = size * 0.95, h = tall(size, lines.length), y0;
-      if (band >= h) y0 = top + (band - h) * (((n.y - 150) / 130) || 0);
-      else y0 = n.y;
-      g.save(); g.translate(n.x, y0 + size * 0.78); g.rotate(n.rot * Math.PI / 180 * (band >= h ? 0.5 : 1));
-      g.fillStyle = n.color; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      function tall(size, nl){ return nl * size * 1.08 + (n.nick ? size * 0.62 : 0) + 3; }
+      function fit(x, y0, y1, size, minSize){
+        // largest size (down to minSize) whose text fits in [x .. 244] x [y0 .. y1], at most three lines
+        while (size >= minSize) {
+          var wr = wrap(size, 244 - x);
+          var w = Math.max(wr.w, n.nick ? (wr.lines.length ? 16 : 0) + size * 0.33 * (n.nick.length + 2) : 0);
+          if (wr.lines.length <= 3 && w <= 244 - x && tall(size, wr.lines.length) <= y1 - y0) return { size: size, lines: wr.lines, w: w };
+          size *= 0.92;
+        }
+        return null;
+      }
+      var x = n.x, place = null, y0 = 0, overPrint = false;
+      // 1) the blank band, cut short where the paper is torn away
+      if (bot > top) {
+        var bandBot = paperDown(sheet, x, 244, top, bot);
+        place = fit(x, top, bandBot, n.size, 14);
+        if (!place && x > 14) { x = 14; bandBot = paperDown(sheet, x, 244, top, bot); place = fit(x, top, bandBot, n.size, 14); }
+        if (place) y0 = top + (bandBot - top - tall(place.size, place.lines.length)) * Math.min(1, Math.max(0, (n.y - 150) / 130));
+      }
+      // 2) otherwise over the print, smaller, somewhere the paper is whole
+      if (!place) {
+        // just above the red rule (or the torn edge), over the last lines of print, never on the contacts
+        overPrint = true; x = 14;
+        var limit = paperDown(sheet, x, 244, 110, bot > 110 ? bot : 300);
+        place = fit(x, 110, limit, Math.min(n.size, 18), 11);
+        if (!place) return;
+        y0 = limit - tall(place.size, place.lines.length);
+      }
+      var size = place.size, lines = place.lines, lh = size * 1.08;
+      g.save();
+      g.clip(sheet);
+      g.translate(x, y0 + size * 0.78);
+      g.rotate(n.rot * Math.PI / 180 * (overPrint ? 0.25 : 0.4));
+      g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       g.font = '600 ' + size.toFixed(1) + 'px ' + F_HAND;
+      if (overPrint) {
+        // the print is scraped clean around the strokes, as if written with a heavy hand on a light patch
+        g.lineJoin = 'round'; g.strokeStyle = 'rgba(238,230,212,0.93)'; g.lineWidth = size * 0.34;
+        for (var k = 0; k < lines.length; k++) g.strokeText(lines[k], k ? 6 : 0, k * lh);
+      }
+      g.fillStyle = n.color;
       for (var j = 0; j < lines.length; j++) g.fillText(lines[j], j ? 6 : 0, j * lh);
-      if (n.nick) { g.font = '600 ' + (size * 0.6).toFixed(1) + 'px ' + F_HAND; g.globalAlpha = 0.85; g.fillText('— ' + n.nick, 16, lines.length * lh - size * 0.12); }
+      if (n.nick) {
+        g.font = '600 ' + (size * 0.6).toFixed(1) + 'px ' + F_HAND; g.globalAlpha = 0.85;
+        var ny = lines.length * lh - size * 0.12;
+        if (overPrint) { g.globalAlpha = 1; g.strokeText('— ' + n.nick, 16, ny); g.globalAlpha = 0.85; }
+        g.fillText('— ' + n.nick, 16, ny);
+      }
       g.restore();
     }
 
