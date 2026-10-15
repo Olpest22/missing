@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<style>[hidden]{display:none!important}body{margin:0}img{max-width:100%}</style>
+<style>
+[hidden]{display:none!important}body{margin:0}img{max-width:100%}
+</style>
 <title>Стена пропавших</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Oswald:wght@600;700&family=PT+Sans+Narrow:wght@400;700&display=swap">
 <link rel="icon" type="image/png" href="free-icon-cross-15549412.png">
 <style>
-/* Layout: the wall is a tall block; each poster is its own small picture that the browser places and scrolls; a lightbox shows one poster up close */
 :root{
   --wall:#1b1815;
   --ink:#1c1817;
@@ -34,37 +35,30 @@ body{background:var(--wall);color:var(--ink)}
 .lb{position:fixed;inset:0;z-index:5;background:rgba(8,6,5,.86);display:grid;place-items:center;padding:16px;cursor:zoom-out;outline:none}
 .lb canvas{display:block;transform:rotate(-1.2deg);max-width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-
 </style>
 </head>
 <body>
 
 
 
-<main id="wall" tabindex="0" role="img" aria-label="Стена, сплошь заклеенная вымышленными объявлениями о пропавших людях. Нажмите на объявление, чтобы прочитать его."></main>
+<main id="wall" tabindex="0" role="img" aria-label="Стена, сплошь заклеенная объявлениями о пропавших людях. Нажмите на объявление, чтобы прочитать его."></main>
 <div class="dusk" id="dusk"></div>
 <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Объявление крупно. Нажмите в любом месте, чтобы закрыть." tabindex="-1">
   <canvas id="lbCanvas"></canvas>
   <p class="sr" id="lbText"></p>
 </div>
 
-<script>
-(function(){
+<script>(function(){
   'use strict';
-
   var hot = window.claude && window.claude.hot;
   var START = Date.now();
   var NOW = new Date();
-  // ---------- everything that makes a poster: identities, texts, faces, paper ----------
-  // CORE uses nothing from the page except the mk() it is given, so the same code also runs inside background workers
   function CORE(mk, env){
     var NOW = new Date(env.now);
     var RED = '#b3161c', INK = '#1c1817', PEN = '#23408e', MARKER = '#141111', WALL = '#1b1815';
     var F_BODY = '"PT Sans Narrow","Arial Narrow","Roboto Condensed",Arial,sans-serif';
     var F_HEAD = 'Oswald,"PT Sans Narrow","Arial Narrow",Impact,sans-serif';
     var F_HAND = 'Caveat,"Marck Script","Segoe Print",cursive';
-
-    // ---------- helpers ----------
     function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
     function seeded(n, salt){ return mulberry(((n + 1) * 2654435761 ^ salt) >>> 0); }
     function hashStr(s){ var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -75,10 +69,6 @@ body{background:var(--wall);color:var(--ink)}
     function fmtDate(d){ return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
     function fmtTime(d){ return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
     function rr(g, x, y, w, h, rad){ g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); }
-
-    // ---------- word pools (all invented) ----------
-    // one batch of 1 008 units (К-0417): the inventory lists them, the wall shows the same people
-    // the client's seven orders add up to 1 007 units; unit 1 008 is the client himself
     var UNITS = 1008, STREAMER_PID = 1007;
     var BATCHES = [[2021, 3, 17, 100], [2021, 8, 3, 150], [2022, 1, 14, 150], [2023, 0, 11, 200], [2023, 5, 20, 150], [2024, 2, 5, 150], [2024, 9, 18, 107]];
     var LAST_DAY = new Date(2026, 0, 1, 1, 30);
@@ -89,7 +79,6 @@ body{background:var(--wall);color:var(--ink)}
     var CITIES = ['Казань','Пермь','Самара','Тверь','Вологда','Иркутск','Омск','Ярославль','Курск','Томск','Киров','Чита','Владимир','Орёл','Псков','Саратов','Тула','Ижевск','Кострома','Барнаул','Сыктывкар','Владивосток','Петрозаводск'];
     var PLACES = ['на остановке «Конечная»','у старого моста','на автовокзале','в круглосуточном магазине у дома','у проходной завода','на вокзале','во дворе своего дома','на заправке на выезде из города','в последнем вагоне электрички','у подъезда'];
     var BUILD = ['худощавое телосложение','среднее телосложение','плотное телосложение','спортивное телосложение'];
-    // every description item carries what the photo has to show
     var HAIR_M = [['тёмные волосы, короткая стрижка','short','dark'],['светлые волосы','short','light'],['седые волосы','short','grey'],['русые волосы','short','mid'],['бритая голова','buzz','dark'],['тёмные вьющиеся волосы','curly','dark'],['рыжие волосы','short','red'],['залысины, тёмные волосы','receding','dark']];
     var HAIR_F = [['тёмные волосы до плеч','shoulder','dark'],['светлые волосы, собраны в хвост','tail','light'],['рыжие волосы, каре','bob','red'],['русые длинные волосы','long','mid'],['седые волосы, короткая стрижка','shortf','grey'],['крашеные красные волосы','long','dyed'],['тёмные длинные волосы','long','dark']];
     var HAIR_TONE = { dark: [28, 55], mid: [85, 115], light: [150, 185], red: [110, 140], grey: [175, 210], dyed: [75, 100] };
@@ -97,7 +86,6 @@ body{background:var(--wall);color:var(--ink)}
     var EYE_TONE = { 'карие глаза': 38, 'зелёные глаза': 62, 'серые глаза': 100, 'голубые глаза': 112 };
     var SPECIAL_M = [['шрам над левой бровью','scar'],['хромает на правую ногу',''],['татуировка на запястье',''],['носит очки','glasses'],['родинка на щеке','mole'],['худощавое лицо','thin'],['борода и усы','beard'],['щетина','stubble'],['может не помнить своё имя','']];
     var SPECIAL_F = [['шрам над левой бровью','scar'],['татуировка на запястье',''],['носит очки','glasses'],['родинка на щеке','mole'],['проколото левое ухо','earring'],['может не помнить своё имя','']];
-    // tops: words, cut, how bright the colour comes out in a black-and-white photo, hood
     var TOP_M = [['чёрная куртка с капюшоном','jacket',34,'down'],['серая толстовка','hoodie',130,'down'],['тёмно-синий пуховик','puffer',55,''],['зелёная ветровка','jacket',100,''],['кожаная куртка','leather',30,''],['камуфляжная куртка','camo',95,''],['бордовый свитер','sweater',65,''],['серое пальто','coat',135,''],['белая рубашка','shirt',212,'']];
     var TOP_F = [['бежевое пальто','coat',180,''],['красный пуховик','puffer',100,''],['чёрная куртка','jacket',34,''],['длинное серое пальто','coat',130,''],['белая толстовка','hoodie',212,'down'],['джинсовая куртка','denim',110,''],['зелёный плащ','coat',100,'']];
     var BOT_M = ['синие джинсы','чёрные спортивные брюки','серые брюки','камуфляжные штаны'];
@@ -110,12 +98,6 @@ body{background:var(--wall);color:var(--ink)}
     var PAPERS = ['#ebe4d2','#f1eee5','#e4d8bc','#d9d2c1','#eee2c3','#e7e2d6'];
     var TAPE = [[3,8],[20,0],[45,6],[70,0],[97,5],[100,92],[78,100],[50,94],[25,100],[0,95]];
     var PHONE = typeof Path2D === 'function' ? new Path2D('M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1L6.6 10.8z') : null;
-
-    // ---------- what each unit once wrote in the stream chat ----------
-    // Every one of the 1 008 has a fixed character: an age group, a temperament, people they miss, a pet, a home town,
-    // and how long they have been "on the channel" (the batch date). The longer they have been there, the more the
-    // person is worn down into a bot: 2024 units still talk, 2021 units mostly spam, with a slip now and then.
-    // {g:he|she} picks the gendered form; {first} {city} {mom} {spouse} {kid} {sib} {pet} {age} {num} {job} are filled in.
     var CH_KIDS = ['Маша','Саша','Даша','Ваня','Миша','Лёша','Катя','Аня','Дима','Полина','Соня','Тёма','Лиза','Кирюша','Варя','Егорка'];
     var CH_PETS = ['Барсик','Мурка','Бакс','Джек','Дуся','Тиша','Рыжик','Граф','Булка','Шарик','Найда','Кузя','Пушок','Чара','Персик','Лаки'];
     var CH_JOBS = {
@@ -128,8 +110,6 @@ body{background:var(--wall);color:var(--ink)}
     var CH_NICK = ['tihiy','lisa','kotik','zloy','solnce','veter','luna','gost','pixel','bober','kedr','pelmen','ryzhik','shmel','sova','ezhik','grom','vorona','dym','sneg','moroz','kit','lis','ten','zayac','gus','kust','pyl'];
     var TR = { 'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya' };
     function translit(s){ return String(s).toLowerCase().split('').map(function(ch){ return TR[ch] != null ? TR[ch] : ch; }).join('').replace(/[^a-z0-9_]/g, ''); }
-
-    // stage 0: taken in 2024, still themselves. Shared by everyone, sorted by temperament.
     var CH0 = {
       scared: ['где я','что происходит','я не понимаю где я','тут темно','кто-нибудь это видит?','помогите пожалуйста','я не могу выйти',
         'я не могу закрыть глаза','почему я это пишу','это не я пишу','я не нажимаю на клавиши','руки не мои','я вижу только чат',
@@ -155,7 +135,6 @@ body{background:var(--wall);color:var(--ink)}
       lucid: ['считай живых','считай живых','нас тут много','нас больше тысячи','я считаю. 1, 2, 3...','у каждого есть номер','мой номер {num}',
         'мы все тут в чате','нас продали','каждый ник это человек','не верь счётчику','счётчик врёт','посчитай сколько нас','считай нас','не все тут люди. все тут люди','каждого записали в табличку','посмотрите на ники','нас списывают по одному','сколько живых осталось?','считай до тысячи']
     };
-    // stage 0, by age group (any temperament)
     var CH0A = {
       kid: ['я хочу к маме','мам забери меня','мама я не специально','я больше не буду','у меня завтра {job}','я {g:обещал|обещала} маме быть в 10',
         'папа будет ругаться','ну пожалуйста','можно я домой','мне {age}','скажите {sib} что я не {g:брал|брала} её наушники',
@@ -173,7 +152,6 @@ body{background:var(--wall);color:var(--ink)}
         'я {age} лет {g:прожил|прожила}','у меня рассада','кто полечит {pet}?','где мои очки','я не вижу букв','позовите кого-нибудь из взрослых',
         'мне надо в поликлинику','я ничего не {g:покупал|покупала}','спаси господи','внучка {kid} позвони бабушке|внучка {kid} позвони дедушке','Здравствуйте. Это телевизор?','помогите старику|помогите старушке','где мой платок','у меня кошка {pet}','я ветеран труда']
     };
-    // stage 1: 2023, worn: short, pleading, slipping
     var CH1 = ['помгите','сколько ещё','я уже давно тут','сколько прошло','год? два?','я {g:забыл|забыла} лицо мамы','не забыть: {city}',
       '{city} {city} {city}','я пишу то что мне дают','это не мои слова','я пишу привет но я не хочу писать привет','привет. нет. не привет',
       'как дела. плохо. как дела','я больше не чувствую','{g:голоден|голодна}','кто-то ещё?','нас кормят чатом','мы смеёмся когда надо',
@@ -183,21 +161,17 @@ body{background:var(--wall);color:var(--ink)}
       'хочу спать','дайте поспать','выключите свет','пожалуйста','пж','пожалуйста пожалуйста','мама','домой','я хочу домой домой',
       'ты видишь нас?','стример посмотри в чат','мы тут','{date} помню','{job}... было что-то такое','у меня был {pet}','считай живых',
       'нас меньше чем было','кто-то пропал из чата','нас было больше','сегодня кого-то списали','я считаю ники','я забываю буквы','какое слово... дом','{g:забыл|забыла} как пишется мама','мма','мааа','сплю с открытыми','кормят светом','эфир это еда','эфир это воздух','я стал{g:|а} тише','онлайн растёт','ещё одного привезли'];
-    // stage 2: 2022, fading: bot noise with the person showing through
     var CH2 = ['привет стример привет','ахах. ахах. мама','лол','привет привет привет','как дела как дела','го го го','я я я',
       '{first}? это я? {first}','мне кажется меня звали {first}','имя... имя...','{g:забыл|забыла}','{city}?','лайк подписка','крутой стрим',
       'крутой стрим помогите','топ стрим. домой','ахахах больно','gg','+ + + домой','PogChamp','pog. pog. мама','лучший стример. помогите',
       '{city} привет','привет. откуда я... откуда','ору','жиза','имба. холодно','хаха','база','красава','подписался. помогите','LUL',
       'kekw','ахах','ахаха ахаха','w','F','топ','я тут тут тут','привет я бот','я бот?','я бот','я не бот','бот не бот',
       'смешно','смешно смешно','ха','мама ахах','!drop','!drop домой','чат','чааат','))))',')))) ((((','на миг свободны','считай живых','привет новенький','привет {city}','гыгы','ыыы','аааа','ахахахахаха','хахахаха нет','мясо','мяско','лучший мясник','спасибо мико'];
-    // stage 3: 2021, bots: almost nothing left
     var CH3 = ['привет','привет стример','PogChamp','Kappa','LUL','!drop','+','++','gg','ахахах','лол','го','топ','красава','имба',
       'жиза','хаха','))))','kekw','ору','база','w','F','1','pog','крутой стрим','лучший стример','подписался','лайк','KEKW','Pog',
       'ахах','гг вп','сыграй ещё','это база','рофл','кринж','EZ','Clap','ля','ну','ага','да','+1','oO','привет всем','ку','ку чат','gg wp'];
-    // what breaks through on stage 3
     var CH3_SLIP = ['больно','мама','домой','п о м о г и т е','ХОЛОДНО','{first}','не','жив{g:|а}','я','здесь','нет','мама мама',
       'выпусти','{city}','помню','считай живых','на миг свободны','где','кто я','я был{g:|а}'];
-
     function fillChat(s, P, x){
       return s.replace(/\{g:([^|}]*)\|([^}]*)\}/g, function(_, m, f){ return P.female ? f : m; })
         .replace(/\{(\w+)\}/g, function(_, k){ return x[k] != null ? x[k] : ''; });
@@ -215,7 +189,6 @@ body{background:var(--wall);color:var(--ink)}
       var stage = bi <= 1 ? 3 : bi === 2 ? 2 : bi <= 4 ? 1 : 0;
       var age = P.age;
       var group = age < 18 ? 'kid' : age < 28 ? 'young' : age < 50 ? 'adult' : age < 65 ? 'older' : 'elder';
-      // temperament leans on age: the old are more polite and pray more, the young get angry or refuse to believe
       var w = { scared: 22, polite: 6, practical: 9, angry: 11, denial: 10, praying: 5, numb: 10, lucid: 6 };
       if (group === 'kid') { w.scared += 25; w.angry -= 6; w.polite -= 4; }
       if (group === 'young') { w.angry += 6; w.denial += 6; }
@@ -236,10 +209,8 @@ body{background:var(--wall);color:var(--ink)}
       if (stage === 0) {
         var own = CH0A[group], pool = CH0[temper];
         text = r() < 0.45 ? pick(r, own) : pick(r, pool);
-        // "a|b": the second form is for women
         if (text.indexOf('|') >= 0 && text.indexOf('{g:') < 0) text = text.split('|')[P.female ? 1 : 0];
         if (temper === 'lucid' && r() < 0.35) text = 'считай живых';
-        // a second line from the other side of their character, now and then
         if (r() < 0.3) {
           var more = own.indexOf(text) >= 0 ? pick(r, pool) : pick(r, own);
           if (more.indexOf('|') >= 0 && more.indexOf('{g:') < 0) more = more.split('|')[P.female ? 1 : 0];
@@ -252,20 +223,17 @@ body{background:var(--wall);color:var(--ink)}
       } else if (stage === 2) {
         text = r() < 0.12 ? pick(r, CH1) : pick(r, CH2);
       } else {
-        // farm accounts: one to three stock tokens, and sometimes something human caught in between
         var n = 1 + (r() < 0.45 ? 1 : 0) + (r() < 0.15 ? 1 : 0), toks = [];
         for (var q = 0; q < n; q++) toks.push(pick(r, CH3));
         if (r() < 0.25) toks.splice(Math.floor(r() * (toks.length + 1)), 0, pick(r, CH3_SLIP));
         text = toks.join(' ');
       }
       text = fillChat(text, P, x);
-      // the longer on the channel, the worse the handwriting copy of it: dropped letters, stutters, spacing
       if (stage >= 1 && text.length > 4 && r() < 0.25) text = typo(text, r);
       if (stage === 1 && r() < 0.15) { var ws = text.split(' '); text = text + ' ' + ws[ws.length - 1]; }
       if (stage === 2 && r() < 0.2 && text.length < 14) text = text + ' ' + text;
       if (stage === 0 && (temper === 'polite' || group === 'elder') && r() < 0.7) text = text.charAt(0).toUpperCase() + text.slice(1);
       if (temper === 'angry' && stage <= 1 && r() < 0.3) text = text.toUpperCase();
-      // nicknames: the fresh ones still carry a name or a year; the old ones are anonymous farm accounts
       var nick;
       var yr = String(P.created.getFullYear() - age).slice(2);
       if (stage === 0) nick = r() < 0.5 ? translit(P.first) + '_' + yr : translit(P.first).slice(0, 3) + '_' + translit(P.city).slice(0, 3) + Math.floor(r() * 90 + 10);
@@ -276,22 +244,17 @@ body{background:var(--wall);color:var(--ink)}
       CHATS.set(P.pid, res);
       return res;
     }
-
     function fem(s){
       if (/(ский|цкий)$/.test(s)) return s.replace(/ий$/, 'ая');
       if (/(ов|ев|ёв|ин|ын)$/.test(s)) return s + 'а';
       return s;
     }
-
-    // ---------- faces: drawn in code (nobody real), then obscured ----------
-    // GFX runs on the page, and also as is inside background workers (there mk makes OffscreenCanvas), so it uses nothing from outside
     function GFX(mk){
       function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
       function hashStr(s){ var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
       function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
       function pick(r, arr){ return arr[Math.floor(r() * arr.length)]; }
       function rr(g, x, y, w, h, rad){ g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); }
-      // ---------- textures made once ----------
       function noiseTile(size, lo, hi){
         var c = mk(size, size);
         var g = c.getContext('2d'), im = g.createImageData(size, size), p = im.data;
@@ -300,8 +263,6 @@ body{background:var(--wall);color:var(--ink)}
         return c;
       }
       var GRAIN = noiseTile(128, 0, 255);
-      // ---------- photographic faces, drawn in code (nobody real), then obscured ----------
-      // the in-between steps of a blur are drawn on a few canvases that are kept and reused
       var SCRATCH = new Map();
       function scratch(w, h, slot){
         var key = w + 'x' + h + slot, s = SCRATCH.get(key);
@@ -309,7 +270,6 @@ body{background:var(--wall);color:var(--ink)}
         else s.g.clearRect(0, 0, w, h);
         return s;
       }
-      // gaussian-like blur by repeated halving and doubling; works in every browser
       function softBlur(src, levels){
         var sizes = [[src.width, src.height]], cur = src, i;
         for (i = 0; i < levels; i++) { var p = sizes[sizes.length - 1]; sizes.push([Math.max(2, Math.round(p[0] / 2)), Math.max(2, Math.round(p[1] / 2))]); }
@@ -318,7 +278,6 @@ body{background:var(--wall);color:var(--ink)}
         var o = mk(sizes[0][0], sizes[0][1]); o.getContext('2d').drawImage(cur, 0, 0, sizes[0][0], sizes[0][1]);
         return o;
       }
-      // draw img over g only inside a soft-edged ellipse
       function maskedDraw(g, img, cx, cy, rx, ry, soft){
         var W2 = img.width, H2 = img.height;
         var m = mk(W2, H2), mg = m.getContext('2d'), sx = rx / ry;
@@ -331,7 +290,6 @@ body{background:var(--wall);color:var(--ink)}
         mg.fillRect(-cx / sx - 4, -cy - 4, W2 / sx + 8, H2 + 8);
         g.drawImage(m, 0, 0);
       }
-
       function makePortrait(look, key, scale){
         var PS = scale, PW = Math.round(180 * PS), PH = Math.round(232 * PS);
         var r = mulberry(look.seed || hashStr(key));
@@ -347,7 +305,6 @@ body{background:var(--wall);color:var(--ink)}
         function units(){ g.setTransform(PS, 0, 0, PS, 0, 0); }
         function pixels(){ g.setTransform(1, 0, 0, 1, 0, 0); }
         units();
-
         if (kind === 'viewer') {
           g.fillStyle = grey(28); g.fillRect(0, 0, W, H);
           pixels(); g.globalAlpha = 0.55; g.fillStyle = g.createPattern(GRAIN, 'repeat'); g.fillRect(0, 0, PW, PH); g.globalAlpha = 1; units();
@@ -357,8 +314,6 @@ body{background:var(--wall);color:var(--ink)}
           g.fillStyle = 'rgba(0,0,0,0.3)'; for (var yy = 0; yy < H; yy += 3) g.fillRect(0, yy, W, 1);
           return c;
         }
-
-        // --- an out-of-focus place behind the person
         var bg = 80 + r() * 110;
         var lg = g.createLinearGradient(0, 0, 0, H); lg.addColorStop(0, grey(bg + 30)); lg.addColorStop(1, grey(bg - 40));
         g.fillStyle = lg; g.fillRect(0, 0, W, H);
@@ -375,8 +330,6 @@ body{background:var(--wall);color:var(--ink)}
           for (i = 0; i < 6; i++) blob(r() * W, r() * H * 0.5, 6 + r() * 12, 230, 0.7);
         }
         pixels(); var bgSoft = softBlur(c, 3); g.clearRect(0, 0, PW, PH); g.drawImage(bgSoft, 0, 0); units();
-
-        // --- the person
         var L = r() < 0.5 ? -1 : 1, turn = (r() - 0.5) * 0.36;
         var cx = 90 + (r() - 0.5) * 12, cy = 100 + (r() - 0.5) * 10;
         var fw = female ? 36 + r() * 4 : 38 + r() * 5;
@@ -392,7 +345,6 @@ body{background:var(--wall);color:var(--ink)}
         var cloth = look.cloth != null ? look.cloth : 60;
         var sw = build === 'athletic' ? 1.1 : build === 'heavy' ? 1.06 : build === 'slim' ? 0.93 : 1;
         var sy = cy + fh + 3;
-        // the head throws a soft shadow on whatever is behind it
         blobE(cx - L * fw * 0.6, cy + fh * 0.3, fw * 1.7, fh * 1.6, bg - 70, 0.4);
         var hairStyle = look.hair || 'short';
         var style = look.hat === 'cap' ? 'cap' : look.hat === 'beanie' ? 'beanie' : hairStyle;
@@ -400,7 +352,6 @@ body{background:var(--wall);color:var(--ink)}
         var hoodUp = look.hood === 'up', hoodDown = look.hood === 'down';
         var glasses = !!marks.glasses;
         var mode = (key === 'm0' || key === 'streamer') ? 'blur' : pick(r, ['blur','blur','blur','blur','pixel','pixel','smear','smear','bar','scratch','scratch']);
-
         if (hoodUp) {
           var hood = new Path2D();
           hood.moveTo(cx - fw * 1.6, sy + 40);
@@ -415,8 +366,6 @@ body{background:var(--wall);color:var(--ink)}
           g.strokeStyle = grey(cloth + 60, 0.7); g.lineWidth = 1.2;
           for (s = -1; s <= 1; s += 2) { g.beginPath(); g.moveTo(cx + s * fw * 0.5, sy + 4); g.quadraticCurveTo(cx + s * fw * 0.55, sy + 25, cx + s * fw * 0.45, sy + 42); g.stroke(); }
         }
-
-        // long hair falls behind the shoulders, so it goes down before the body
         if ((hairStyle === 'long' || hairStyle === 'bob' || hairStyle === 'shoulder') && !hoodUp) {
           var hb = hairStyle === 'long' ? sy + 40 + r() * 20 : hairStyle === 'shoulder' ? sy + 6 : cy + fh * 0.95;
           var hwid = hairStyle === 'long' ? 1.45 : hairStyle === 'shoulder' ? 1.35 : 1.25;
@@ -439,7 +388,6 @@ body{background:var(--wall);color:var(--ink)}
           g.fillStyle = vgh; g.fillRect(cx - fw * 2, cy, fw * 4, hb - cy + 10);
           g.restore();
         }
-
         var body = new Path2D();
         body.moveTo(cx - fw * 0.72, sy - 6);
         body.quadraticCurveTo(cx - fw * 1.4 * sw, sy - 2, cx - fw * 2.1 * sw, sy + 20);
@@ -451,7 +399,6 @@ body{background:var(--wall);color:var(--ink)}
         var bgr = g.createLinearGradient(cx - fw * 2.2 * L, 0, cx + fw * 2.2 * L, 0); bgr.addColorStop(0, grey(cloth + 32)); bgr.addColorStop(1, grey(cloth - 25));
         g.fillStyle = bgr; g.fill(body);
         g.save(); g.clip(body);
-        // folds are soft light and shade, never hard lines
         for (i = 0; i < 6; i++) blobE(cx + (r() - 0.5) * fw * 4, sy + 30 + r() * 45, fw * (0.2 + r() * 0.3), 18 + r() * 20, r() < 0.5 ? cloth - 30 : cloth + 25, 0.35);
         blobE(cx + L * fw * 1.7, sy + 22, fw * 0.8, 14, 255, 0.14);
         for (s = -1; s <= 1; s += 2) blobE(cx + s * fw * 2.35, H, fw * 0.5, 34, cloth - 45, 0.5);
@@ -492,7 +439,6 @@ body{background:var(--wall);color:var(--ink)}
           g.strokeStyle = grey(cloth + 55, 0.5); g.lineWidth = 1.4;
           g.beginPath(); g.moveTo(cx - fw * 1.45, sy + 18); g.quadraticCurveTo(cx - fw * 1.3, sy - 14, cx, sy - 12); g.quadraticCurveTo(cx + fw * 1.3, sy - 14, cx + fw * 1.45, sy + 18); g.stroke();
         }
-
         var neck = new Path2D();
         neck.moveTo(cx - fw * 0.6, cy + fh * 0.5); neck.lineTo(cx - fw * 0.72, sy + 2); neck.quadraticCurveTo(cx, sy + 12, cx + fw * 0.72, sy + 2); neck.lineTo(cx + fw * 0.6, cy + fh * 0.5); neck.closePath();
         g.fillStyle = grey(skin - 40); g.fill(neck);
@@ -501,11 +447,8 @@ body{background:var(--wall);color:var(--ink)}
         var ngr = g.createLinearGradient(cx - fw * 0.7 * L, 0, cx + fw * 0.7 * L, 0); ngr.addColorStop(0, grey(255, 0.08)); ngr.addColorStop(1, grey(0, 0.3));
         g.fillStyle = ngr; g.fillRect(cx - fw, cy, fw * 2, fh * 1.5);
         g.restore();
-
-        // collar, so the neck goes into the clothes instead of sitting on them
         if (!hoodDown && !hoodUp) {
           if (top === 'coat') {
-            // what is worn under the coat shows in the V between the lapels
             g.fillStyle = grey(cloth < 110 ? 185 : 55); g.beginPath(); g.moveTo(cx - fw * 0.62, sy - 6); g.lineTo(cx + fw * 0.62, sy - 6); g.lineTo(zx, sy + 44); g.closePath(); g.fill();
             for (s = -1; s <= 1; s += 2) {
               var lap = new Path2D();
@@ -555,7 +498,6 @@ body{background:var(--wall);color:var(--ink)}
         }
         for (s = -1; s <= 1; s += 2) { ell(cx + s * fw * 0.97, cy + fh * 0.02, fw * 0.12, fh * 0.17, skin - 32); blobE(cx + s * fw * 0.97, cy + fh * 0.02, fw * 0.06, fh * 0.1, skin - 75, 0.6); }
         if (marks.earring) { g.strokeStyle = grey(225, 0.9); g.lineWidth = 1; g.beginPath(); g.arc(cx + fw * 0.97, cy + fh * 0.2, 2.3, 0, Math.PI * 2); g.stroke(); }
-
         var face = new Path2D();
         face.moveTo(cx, cy - fh);
         face.bezierCurveTo(cx + fw * 0.75, cy - fh, cx + fw * 1.02, cy - fh * 0.55, cx + fw, cy - fh * 0.1);
@@ -565,7 +507,6 @@ body{background:var(--wall);color:var(--ink)}
         face.bezierCurveTo(cx - fw * 1.02, cy - fh * 0.55, cx - fw * 0.75, cy - fh, cx, cy - fh);
         face.closePath();
         g.fillStyle = grey(skin); g.fill(face);
-
         g.save(); g.clip(face);
         var sl = g.createLinearGradient(cx - fw * L, 0, cx + fw * L, 0);
         sl.addColorStop(0, grey(255, 0.16)); sl.addColorStop(0.45, grey(0, 0)); sl.addColorStop(1, grey(0, 0.46));
@@ -574,13 +515,10 @@ body{background:var(--wall);color:var(--ink)}
         vgr.addColorStop(0, grey(255, 0.08)); vgr.addColorStop(0.6, grey(0, 0)); vgr.addColorStop(1, grey(0, 0.26));
         g.fillStyle = vgr; g.fillRect(cx - fw * 1.3, cy - fh * 1.2, fw * 2.6, fh * 2.4);
         blobE(cx + L * fw * 0.45 + fx, cy + fh * 0.08, fw * 0.32, fh * 0.2, 255, 0.13);
-        // round the face: darker towards its edges
         g.strokeStyle = grey(0, 0.07);
         var rim = [18, 11, 6];
         for (i = 0; i < rim.length; i++) { g.lineWidth = rim[i]; g.stroke(face); }
-        // eye sockets
         for (s = -1; s <= 1; s += 2) blobE(cx + s * fw * 0.4 + fx, cy - fh * 0.1, fw * 0.32, fh * 0.13, skin - 75, 0.55);
-        // eyes, lids and brows
         var ey = cy - fh * 0.1, ew = fw * 0.26, eh = fw * 0.1;
         for (s = -1; s <= 1; s += 2) {
           var ex = cx + s * fw * 0.4 + fx;
@@ -594,19 +532,16 @@ body{background:var(--wall);color:var(--ink)}
           g.strokeStyle = grey(skin - 55, 0.5); g.lineWidth = 1;
           g.beginPath(); g.moveTo(ex - ew * 0.9, ey - eh * 1.2); g.quadraticCurveTo(ex, ey - eh * 2.4, ex + ew * 0.9, ey - eh * 1.2); g.stroke();
           g.strokeStyle = grey(hairTone - 10, 0.9); g.lineWidth = female ? 2 : 3.2; g.lineCap = 'round';
-          // brow runs from the inner end near the nose to the slightly lower outer end
           g.beginPath(); g.moveTo(ex - s * ew * 1.1, ey - fh * 0.15);
           g.quadraticCurveTo(ex + s * ew * 0.2, ey - fh * 0.25, ex + s * ew * 1.2, ey - fh * 0.12); g.stroke();
         }
         if (age >= 48) {
-          // years show: forehead lines and bags under the eyes
           g.strokeStyle = grey(skin - 45, 0.3); g.lineWidth = 0.8;
           for (i = 0; i < 3; i++) { g.beginPath(); g.moveTo(cx - fw * 0.45 + fx, cy - fh * (0.42 + i * 0.07)); g.quadraticCurveTo(cx + fx, cy - fh * (0.46 + i * 0.07), cx + fw * 0.45 + fx, cy - fh * (0.42 + i * 0.07)); g.stroke(); }
           for (s = -1; s <= 1; s += 2) { g.beginPath(); g.moveTo(cx + s * fw * 0.22 + fx, ey + eh * 1.6); g.quadraticCurveTo(cx + s * fw * 0.4 + fx, ey + eh * 2.6, cx + s * fw * 0.6 + fx, ey + eh * 1.4); g.stroke(); }
         }
         if (marks.scar) { g.strokeStyle = grey(skin + 35, 0.85); g.lineWidth = 0.9; g.beginPath(); g.moveTo(cx + fw * 0.3 + fx, cy - fh * 0.34); g.lineTo(cx + fw * 0.5 + fx, cy - fh * 0.27); g.stroke(); }
         if (marks.mole) ell(cx - L * fw * 0.42 + fx, cy + fh * 0.26, 1.7, 1.6, skin - 105);
-        // nose
         var nx = cx + fx * 1.2, ny = cy + fh * 0.28;
         blobE(nx - L * fw * 0.12, cy + fh * 0.12, fw * 0.09, fh * 0.22, skin - 60, 0.45);
         blobE(nx + L * fw * 0.04, cy + fh * 0.05, fw * 0.05, fh * 0.2, 255, 0.18);
@@ -615,7 +550,6 @@ body{background:var(--wall);color:var(--ink)}
         ell(nx + fw * 0.1, ny + fh * 0.03, fw * 0.05, fw * 0.03, skin - 90, 0.8);
         blobE(nx, ny + fh * 0.08, fw * 0.18, fh * 0.04, skin - 60, 0.35);
         g.strokeStyle = grey(skin - 50, age >= 48 ? 0.4 : 0.25); g.lineWidth = 2;
-        // mouth
         var mx = cx + fx, my = cy + fh * 0.5, mw = fw * (female ? 0.36 : 0.4);
         for (s = -1; s <= 1; s += 2) { g.beginPath(); g.moveTo(nx + s * fw * 0.18, ny); g.quadraticCurveTo(nx + s * fw * 0.3, my - fh * 0.1, mx + s * mw * 1.1, my + fh * 0.05); g.stroke(); }
         g.fillStyle = grey(skin - (female ? 60 : 42), 0.75);
@@ -623,7 +557,6 @@ body{background:var(--wall);color:var(--ink)}
         g.fillStyle = grey(skin - (female ? 35 : 25), 0.55);
         g.beginPath(); g.moveTo(mx - mw * 0.85, my); g.quadraticCurveTo(mx, my + fh * (female ? 0.12 : 0.1), mx + mw * 0.85, my); g.quadraticCurveTo(mx, my + fh * 0.02, mx - mw * 0.85, my); g.fill();
         blobE(mx, my + fh * 0.16, mw * 0.6, fh * 0.04, skin - 50, 0.35);
-        // beard and moustache as a stippled texture
         if (stubble) {
           for (i = 0; i < 450; i++) {
             var sbx = cx + (r() - 0.5) * fw * 1.9, sby = cy + fh * (0.35 + r() * 0.68);
@@ -645,8 +578,6 @@ body{background:var(--wall);color:var(--ink)}
         g.strokeStyle = grey(skin - 115, 0.9); g.lineWidth = 1.4;
         g.beginPath(); g.moveTo(mx - mw, my); g.quadraticCurveTo(mx, my + fh * 0.015, mx + mw, my); g.stroke();
         g.restore();
-
-        // hair
         function hairShape(vol, drop, rec){
           rec = rec || 0;
           var p = new Path2D(), top = cy - fh * 1.3 * vol;
@@ -654,14 +585,11 @@ body{background:var(--wall);color:var(--ink)}
           p.bezierCurveTo(cx - fw * 1.18 * vol, cy - fh * 1.05 * vol, cx - fw * 0.4, top - 2, cx + fx * 0.2, top);
           p.bezierCurveTo(cx + fw * 0.4, top - 2, cx + fw * 1.18 * vol, cy - fh * 1.05 * vol, cx + fw * 1.06 * vol, cy - fh * 0.1);
           if (female) {
-            // parted off-centre, falling over the temples
             var part = cx + fx * 0.3 + L * fw * 0.25;
             p.bezierCurveTo(cx + fw * 0.9, cy - fh * 0.3, cx + fw * 0.6, cy - fh * (0.55 - drop), part, cy - fh * (0.8 - drop * 0.5));
             p.bezierCurveTo(cx - fw * 0.5, cy - fh * (0.6 - drop), cx - fw * 0.92, cy - fh * 0.32, cx - fw * 1.06 * vol, cy - fh * 0.1);
           } else {
-            // sideburns, temple corners and a slight peak in the middle
             p.lineTo(cx + fw * 0.95, cy - fh * 0.12);
-            // receding temples lift the whole hairline evenly, with the corners a little higher
             p.quadraticCurveTo(cx + fw * 0.9, cy - fh * (0.5 + rec * 0.22), cx + fw * 0.64, cy - fh * (0.66 - drop + rec * 0.16));
             p.quadraticCurveTo(cx + fw * 0.3, cy - fh * (0.72 - drop + rec * 0.12), cx + fx * 0.3, cy - fh * (0.69 - drop + rec * 0.12));
             p.quadraticCurveTo(cx - fw * 0.3, cy - fh * (0.72 - drop + rec * 0.12), cx - fw * 0.64, cy - fh * (0.66 - drop + rec * 0.16));
@@ -688,7 +616,6 @@ body{background:var(--wall);color:var(--ink)}
           hg.addColorStop(0, grey(tone + 35)); hg.addColorStop(1, grey(tone - 20));
           g.fillStyle = hg; g.fill(path);
         }
-        // an uneven outline and a few loose hairs, so the hair does not read as a helmet
         function roughEdge(vol, tone){
           for (var k = 0; k <= 26; k++) {
             var a = Math.PI * (1.04 + 0.92 * k / 26);
@@ -786,13 +713,9 @@ body{background:var(--wall);color:var(--ink)}
           g.lineWidth = 2.5; g.beginPath(); g.moveTo(cx - fw * 1.05, cy + fh * 0.15); g.quadraticCurveTo(cx - fw * 0.85, cy + fh * 0.62, cx - fw * 0.2 + fx, my + fh * 0.02); g.stroke();
           ell(cx - fw * 0.17 + fx, my + fh * 0.02, 4, 3.5, 30);
         }
-
-        // --- obscure the face (inventory thumbnails stay clean: there they are product photos)
         pixels();
         if (look.clean) mode = 'none';
         var fcx = (cx + fx * 0.5) * PS, fcy = (cy + fh * 0.12) * PS, frx = fw * 0.98 * PS, fry = fh * 0.9 * PS;
-        // blur, smear and mosaic hide eyes, nose and mouth; the jaw, beard and hairline stay readable
-        // every kind of obscuring is about half again as strong as it first was
         var icy = (cy + fh * 0.07) * PS, irx = fw * 1.06 * PS, iry = fh * 0.83 * PS;
         if (mode === 'blur') {
           maskedDraw(g, softBlur(softBlur(c, 4), 3), fcx, icy, irx, iry, 0.3);
@@ -820,7 +743,6 @@ body{background:var(--wall);color:var(--ink)}
           var ink = mk(PW, PH), ig = ink.getContext('2d'), q, layer;
           ig.lineCap = 'round'; ig.lineJoin = 'round';
           if (r() < 0.55) {
-            // felt-tip: fast back-and-forth strokes in two crossing layers; overlaps come out darker
             var ang0 = (r() - 0.5) * 0.9;
             for (layer = 0; layer < 2; layer++) {
               var ang = ang0 + (layer ? (r() < 0.5 ? -1 : 1) * (0.35 + r() * 0.55) : 0);
@@ -841,7 +763,6 @@ body{background:var(--wall);color:var(--ink)}
               }
             }
           } else {
-            // ballpoint: dense looping scribble, layered until the face is gone
             for (layer = 0; layer < 5; layer++) {
               var bx2 = fcx + (r() - 0.5) * frx * 0.7, by2 = fcy + (r() - 0.5) * fry * 0.7, a3 = r() * Math.PI * 2;
               ig.strokeStyle = 'rgba(22,26,58,' + (0.55 + r() * 0.2).toFixed(2) + ')';
@@ -861,16 +782,12 @@ body{background:var(--wall);color:var(--ink)}
               ig.stroke();
             }
           }
-          // dry streaks where the pen skipped
           ig.globalCompositeOperation = 'destination-out'; ig.globalAlpha = 0.22;
           ig.fillStyle = ig.createPattern(GRAIN, 'repeat'); ig.fillRect(0, 0, PW, PH);
           ig.globalCompositeOperation = 'source-over'; ig.globalAlpha = 1;
-          // ink soaks a little into the paper, then sits on top
           g.globalAlpha = 0.35; g.drawImage(softBlur(ink, 1), 0, 0); g.globalAlpha = 1;
           g.globalCompositeOperation = 'multiply'; g.drawImage(ink, 0, 0); g.globalCompositeOperation = 'source-over';
         }
-
-        // --- a cheap print: soft focus, contrast, grain, folds
         g.globalAlpha = 0.45; g.drawImage(softBlur(c, 1), 0, 0); g.globalAlpha = 1;
         g.globalCompositeOperation = 'overlay'; g.globalAlpha = 0.38; g.drawImage(c, 0, 0);
         g.globalAlpha = 0.16; g.fillStyle = g.createPattern(GRAIN, 'repeat'); g.fillRect(0, 0, PW, PH);
@@ -887,14 +804,11 @@ body{background:var(--wall);color:var(--ink)}
         }
         return c;
       }
-
       return { makePortrait: makePortrait, noiseTile: noiseTile };
     }
     var GX = GFX(mk);
     var PAPER_GRAIN = GX.noiseTile(128, 178, 255);
     var makePortrait = GX.makePortrait;
-
-    // portraits are made per poster from its look and kept for a while (on the wall they usually come from a worker)
     var PCACHE = new Map(), PCACHE_MAX = 160;
     function photoScale(k){ var s = k * 132 / 180; return s <= 0.8 ? 0.75 : (s <= 1.3 ? 1 : (s <= 1.8 ? 1.5 : 2.2)); }
     function keepFace(ck, c){
@@ -913,7 +827,6 @@ body{background:var(--wall);color:var(--ink)}
       keepFace(ck, c);
       return c;
     }
-    // ---------- torn outline, in percent of width and height ----------
     function torn(r, kind){
       var p = [], x, y;
       for (x = 0; x <= 100; x += 4) p.push([x, r() * 1.3]);
@@ -939,16 +852,12 @@ body{background:var(--wall);color:var(--ink)}
       path.closePath();
       return path;
     }
-
-    // ---------- poster content: depends only on its number ----------
     function randDate(r, lvl){
       var end = NOW.getTime();
       var span = lvl === 0 ? end - new Date(2009, 0, 1).getTime() : lvl === 1 ? 3 * 365 * 864e5 : lvl === 2 ? 60 * 864e5 : 0;
       return new Date(end - r() * span);
     }
-
     var M0_LOOK = { female: false, seed: 4242, age: 33, build: 'athletic', hair: 'curly', hairTone: 38, iris: 38, marks: { beard: true }, top: 'jacket', cloth: 34, hood: 'down', hat: '' };
-    // who a unit is: name, age, looks, clothes. Depends only on the unit number, never on the layout.
     var PERSONS = new Map();
     function person(pid, forceMale){
       var key = pid + (forceMale ? 'm' : '');
@@ -960,7 +869,6 @@ body{background:var(--wall);color:var(--ink)}
       var sur = pick(r, SURN); if (female) sur = fem(sur);
       var age = 14 + Math.floor(r() * 60);
       var height = female ? 155 + Math.floor(r() * 24) : 166 + Math.floor(r() * 27);
-      // one look drives both the description and the photo, so they always agree
       var look = { female: female, seed: (pid * 7919 + 17) >>> 0, age: age, marks: {} };
       var buildIdx = Math.floor(r() * BUILD.length);
       look.build = ['slim', 'avg', 'heavy', 'athletic'][buildIdx];
@@ -983,7 +891,6 @@ body{background:var(--wall);color:var(--ink)}
         clothes.push(hat[0]); look.hat = hat[1]; look.hatTone = hat[2] || (40 + r() * 130);
         if (hat[1] === 'hoodup') look.hood = 'up';
       }
-      // a unit is "created" on the day of the order it came with, always in the small hours
       var b = BATCHES[BATCHES.length - 1], acc = 0;
       for (var bi = 0; bi < BATCHES.length; bi++) { acc += BATCHES[bi][3]; if (pid < acc) { b = BATCHES[bi]; break; } }
       var created = pid === STREAMER_PID ? LAST_DAY : new Date(b[0], b[1], b[2], 3 + Math.floor(r() * 3), Math.floor(r() * 60));
@@ -992,10 +899,8 @@ body{background:var(--wall);color:var(--ink)}
       PERSONS.set(key, res);
       return res;
     }
-
     function posterData(idx, lvlIdx, filler){
       var r = seeded(idx, 0x51ed270b), i;
-      // the wall gets stranger in four even stages over one lap
       var lapPos = lvlIdx / env.lap;
       var lvl = lapPos < 0.25 ? 0 : lapPos < 0.5 ? 1 : lapPos < 0.75 ? 2 : 3;
       var own = !filler && idx % UNITS === STREAMER_PID;
@@ -1003,7 +908,6 @@ body{background:var(--wall);color:var(--ink)}
       var roll = r();
       if (own || (lvl >= 2 && roll < 0.07)) d.kind = 'streamer';
       else if (lvl >= 3 && roll < 0.16) d.kind = 'viewer';
-
       d.base = pick(r, PAPERS);
       d.stains = [];
       var ns = 1 + Math.floor(r() * 3);
@@ -1022,15 +926,13 @@ body{background:var(--wall);color:var(--ink)}
       var nt = r() < 0.25 ? 0 : (r() < 0.7 ? 1 : 2);
       if (nt === 1) d.tapes.push({ x: (40 + r() * 20) * 2.6, rot: (r() - 0.5) * 16 });
       if (nt === 2) { d.tapes.push({ x: (8 + r() * 8) * 2.6, rot: -30 + r() * 14 }); d.tapes.push({ x: (84 + r() * 8) * 2.6, rot: 18 + r() * 14 }); }
-
-      var sameFace = false; // the streamer no longer haunts other posters: he appears once, at the end
+      var sameFace = false;
       var P = person(filler ? (idx * 7 + 3) % UNITS : idx % UNITS, sameFace);
       var female = P.female;
       d.female = female;
       d.pid = P.pid;
       var G = function(m, f){ return female ? f : m; };
       var first = P.first, patr = P.patr, sur = P.sur, age = P.age;
-      // the day someone went missing is the day the inventory says the unit was created
       var when = P.created;
       var year = when.getFullYear();
       var hm = fmtTime(when);
@@ -1045,7 +947,6 @@ body{background:var(--wall);color:var(--ink)}
       else story = dateStr + ' в ' + hm + ' ' + G('вышел', 'вышла') + ' в магазин. Больше ' + G('его', 'её') + ' никто не видел.';
       var look = P.look, signs = P.signs.slice(), clothes = P.clothes.slice();
       if (sameFace) {
-        // the man who keeps turning up under different names, always the same age
         age = 33;
         look = M0_LOOK;
         signs = ['рост 183 см', 'спортивное телосложение', 'тёмные вьющиеся волосы', 'карие глаза', 'борода и усы'];
@@ -1072,12 +973,9 @@ body{background:var(--wall);color:var(--ink)}
       d.clothesLabel = G('Был одет:', 'Была одета:');
       d.look = look;
       d.faceKey = sameFace ? 'm0' : 'u' + P.pid;
-
-      // what this person once wrote in the stream chat, copied onto the poster by hand; always readable up close
       var ch = chatOf(P);
       d.chatNote = { text: ch.text, nick: ch.nick, x: (6 + r() * 14) * 2.6, y: 150 + r() * 130, rot: (r() - 0.5) * 14, size: 19 + r() * 6, color: r() < 0.55 ? PEN : RED };
       d.note = r() < [0.45, 0.5, 0.58, 0.66][lvl] ? d.chatNote : null;
-
       if (d.kind === 'streamer') {
         d.header = 'ПРОПАЛ СТРИМЕР';
         d.sur = 'ИМЯ СКРЫТО';
@@ -1111,25 +1009,20 @@ body{background:var(--wall);color:var(--ink)}
         d.xerox = false; d.photo = 'plain';
         d.note = null; d.chatNote = null;
       }
-
       return d;
     }
-
-    // ---------- text layout on canvas ----------
     function st(w, size, fam, color){ return { font: w + ' ' + size + 'px ' + fam, size: size, color: color }; }
     var ST = {
       sur: st('700', 17, F_BODY, INK), nm: st('700', 13, F_BODY, INK), age: st('700', 12, F_BODY, INK),
       story: st('400', 10.5, F_BODY, INK), sp: st('400', 10.5, F_BODY, INK), lab: st('600', 10.5, F_HEAD, RED),
       ct: st('400', 9.5, F_BODY, INK)
     };
-
     function runs(d, key, style, prefix){
       var s = d[key], p = prefix || '';
       if (!d.mark || d.mark.field !== key) return [{ t: p + s, st: style }];
       var k = d.mark.pos;
       return [{ t: p + s.slice(0, k), st: style }, { t: s.charAt(k), st: style, ring: true, num: d.mark.num }, { t: s.slice(k + 1), st: style }];
     }
-
     function layout(g, rs, maxW, maxLines){
       var words = [], pend = false, i, j;
       for (i = 0; i < rs.length; i++) {
@@ -1166,7 +1059,6 @@ body{background:var(--wall);color:var(--ink)}
       }
       return lines;
     }
-
     function drawRing(g, x, by, w, size, num){
       g.save();
       g.strokeStyle = RED; g.lineWidth = 2;
@@ -1175,7 +1067,6 @@ body{background:var(--wall);color:var(--ink)}
       g.fillText(String(num), x + w + 3, by - size * 0.75);
       g.restore();
     }
-
     function drawLines(g, lines, x, y, maxW, lineH, align){
       g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       for (var i = 0; i < lines.length; i++) {
@@ -1198,11 +1089,9 @@ body{background:var(--wall);color:var(--ink)}
       }
       return lines.length * lineH;
     }
-
     function block(g, rs, x, y, w, lineH, maxLines, align){
       return drawLines(g, layout(g, rs, w, maxLines), x, y, w, lineH, align);
     }
-
     function drawPhoto(g, img, x, y, w, h, mode){
       var sw = img.width, sh = img.height, a = w / h, sa = sw / sh, sx = 0, sy = 0, cw = sw, ch = sh;
       if (a > sa) { ch = sw / a; sy = (sh - ch) * 0.3; } else { cw = sh * a; sx = (sw - cw) / 2; }
@@ -1211,8 +1100,6 @@ body{background:var(--wall);color:var(--ink)}
       else if (mode === 'sepia') { g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = '#eadcc0'; g.fillRect(x, y, w, h); g.restore(); }
       g.strokeStyle = 'rgba(0,0,0,0.65)'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     }
-
-    // ---------- paint one poster in poster units (260 x 368), k = device pixels per unit ----------
     function drawPoster(g, d, k){
       var SH = d.tabs ? 322 : 368, i;
       var sheet = tornPath(d.torn, 260, SH);
@@ -1223,7 +1110,6 @@ body{background:var(--wall);color:var(--ink)}
       g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 9 * k; g.shadowOffsetY = 5 * k;
       g.fillStyle = d.base; g.fill(shape);
       g.restore();
-
       if (d.tabs) {
         g.save();
         for (i = 0; i < 9; i++) {
@@ -1240,7 +1126,6 @@ body{background:var(--wall);color:var(--ink)}
         g.stroke();
         g.restore();
       }
-
       g.save();
       g.clip(sheet);
       for (i = 0; i < d.stains.length; i++) {
@@ -1253,15 +1138,12 @@ body{background:var(--wall);color:var(--ink)}
         cg.addColorStop(0.495, 'rgba(0,0,0,0)'); cg.addColorStop(0.5, 'rgba(0,0,0,0.09)'); cg.addColorStop(0.506, 'rgba(255,255,255,0.25)'); cg.addColorStop(0.512, 'rgba(255,255,255,0)');
         g.fillStyle = cg; g.fillRect(0, 0, 260, SH);
       }
-
-      // header, stretched to the full width like a print shop would
       var fs = Math.min(58, 232 / (d.header.length * 0.5));
       g.font = '700 ' + fs.toFixed(1) + 'px ' + F_HEAD;
       var mw = g.measureText(d.header).width || 1;
       g.save(); g.translate(130, 12 + fs * 0.88); g.scale(232 / mw, 1); g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = RED; g.fillText(d.header, 0, 0); g.restore();
       var y = 12 + fs * 1.08;
       g.fillStyle = RED; g.fillRect(12, y, 236, 2); y += 7;
-
       var side = d.layout === 'side';
       var nmRuns = d.nmRedact ? [{ t: 'ник: ', st: ST.nm }, { t: '', st: ST.nm, redact: 72 }] : runs(d, 'nm', ST.nm);
       if (side) {
@@ -1282,7 +1164,6 @@ body{background:var(--wall);color:var(--ink)}
       }
       y += block(g, [{ t: 'ПРИМЕТЫ:', st: ST.lab }].concat(runs(d, 'signs', ST.sp, ' ')), 12, y, 236, 12.8, side ? 3 : 2, 'left') + 4;
       y += block(g, [{ t: d.clothesLabel.toUpperCase(), st: ST.lab }].concat(runs(d, 'clothes', ST.sp, ' ')), 12, y, 236, 12.8, side ? 3 : 2, 'left');
-
       var showPhone = d.phone && !d.tabs;
       var ctLines = layout(g, [{ t: d.contact, st: ST.ct }], 236, 4);
       var ctH = ctLines.length * 11.4 + (showPhone ? 27 : 0);
@@ -1299,8 +1180,6 @@ body{background:var(--wall);color:var(--ink)}
         g.fillRect(-d.redactW / 2 - 3, -8, 4, 16);
         g.restore();
       }
-
-      // paper grain, worn edges, then print defects
       g.globalCompositeOperation = 'multiply'; g.globalAlpha = 0.5;
       g.fillStyle = g.createPattern(PAPER_GRAIN, 'repeat'); g.fillRect(0, 0, 260, SH);
       g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
@@ -1310,7 +1189,6 @@ body{background:var(--wall);color:var(--ink)}
       if (d.xerox) { g.globalCompositeOperation = 'saturation'; g.fillStyle = '#808080'; g.fillRect(0, 0, 260, SH); g.globalCompositeOperation = 'source-over'; }
       if (d.faded) { g.globalCompositeOperation = 'screen'; g.fillStyle = 'rgba(95,80,55,0.28)'; g.fillRect(0, 0, 260, SH); g.globalCompositeOperation = 'source-over'; }
       g.restore();
-
       for (i = 0; i < d.tapes.length; i++) {
         var tp = d.tapes[i];
         g.save(); g.translate(tp.x, 1); g.rotate(tp.rot * Math.PI / 180);
@@ -1320,18 +1198,12 @@ body{background:var(--wall);color:var(--ink)}
       }
       if (d.note) drawNote(g, d.note, noteTop, noteBot, sheet);
     }
-
-    // a chat line copied by hand: up to three lines of words, the nick smaller underneath
-    // a chat line copied by hand. It goes into the blank space above the contacts, measured against the real
-    // (possibly torn) paper; where there is no such space it is written smaller over the print, with the paper
-    // showing around the strokes. Nothing is ever drawn past the edge of the sheet.
     var HIT = null;
     function onPaper(sheet, x0, x1, y){
       if (!HIT) HIT = mk(1, 1).getContext('2d');
       for (var x = x0; x <= x1 + 0.1; x += Math.max(8, (x1 - x0) / 6)) if (!HIT.isPointInPath(sheet, x, y)) return false;
       return true;
     }
-    // how far down from y the paper stays whole across [x0, x1]
     function paperDown(sheet, x0, x1, y, limit){
       var yy = y;
       while (yy + 2 <= limit && onPaper(sheet, x0, x1, yy + 2)) yy += 2;
@@ -1352,7 +1224,6 @@ body{background:var(--wall);color:var(--ink)}
       }
       function tall(size, nl){ return nl * size * 1.08 + (n.nick ? size * 0.62 : 0) + 3; }
       function fit(x, y0, y1, size, minSize){
-        // largest size (down to minSize) whose text fits in [x .. 244] x [y0 .. y1], at most three lines
         while (size >= minSize) {
           var wr = wrap(size, 244 - x);
           var w = Math.max(wr.w, n.nick ? (wr.lines.length ? 16 : 0) + size * 0.33 * (n.nick.length + 2) : 0);
@@ -1362,16 +1233,13 @@ body{background:var(--wall);color:var(--ink)}
         return null;
       }
       var x = n.x, place = null, y0 = 0, overPrint = false;
-      // 1) the blank band, cut short where the paper is torn away
       if (bot > top) {
         var bandBot = paperDown(sheet, x, 244, top, bot);
         place = fit(x, top, bandBot, n.size, 14);
         if (!place && x > 14) { x = 14; bandBot = paperDown(sheet, x, 244, top, bot); place = fit(x, top, bandBot, n.size, 14); }
         if (place) y0 = top + (bandBot - top - tall(place.size, place.lines.length)) * Math.min(1, Math.max(0, (n.y - 150) / 130));
       }
-      // 2) otherwise over the print, smaller, somewhere the paper is whole
       if (!place) {
-        // just above the red rule (or the torn edge), over the last lines of print, never on the contacts
         overPrint = true; x = 14;
         var limit = paperDown(sheet, x, 244, 110, bot > 110 ? bot : 300);
         place = fit(x, 110, limit, Math.min(n.size, 18), 11);
@@ -1386,7 +1254,6 @@ body{background:var(--wall);color:var(--ink)}
       g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       g.font = '600 ' + size.toFixed(1) + 'px ' + F_HAND;
       if (overPrint) {
-        // the print is scraped clean around the strokes, as if written with a heavy hand on a light patch
         g.lineJoin = 'round'; g.strokeStyle = 'rgba(238,230,212,0.93)'; g.lineWidth = size * 0.34;
         for (var k = 0; k < lines.length; k++) g.strokeText(lines[k], k ? 6 : 0, k * lh);
       }
@@ -1400,7 +1267,6 @@ body{background:var(--wall);color:var(--ink)}
       }
       g.restore();
     }
-
     function scrapData(r){
       return { w: 110 + r() * 170, h: 80 + r() * 150, base: pick(r, PAPERS), torn: torn(r, r() < 0.5 ? 'bottom' : 'corner'), word: r() < 0.75 ? pick(r, SCRAP_WORDS) : '', bw: r() < 0.3 };
     }
@@ -1414,7 +1280,6 @@ body{background:var(--wall);color:var(--ink)}
       g.lineWidth = 18; g.stroke(p); g.lineWidth = 8; g.stroke(p);
       g.restore();
     }
-
     return { posterData: posterData, drawPoster: drawPoster, drawScrap: drawScrap, scrapData: scrapData, photoScale: photoScale,
       keepFace: keepFace, PCACHE: PCACHE, UNITS: UNITS, makePortrait: makePortrait };
   }
@@ -1427,7 +1292,6 @@ body{background:var(--wall);color:var(--ink)}
   function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function seeded(n, salt){ return mulberry(((n + 1) * 2654435761 ^ salt) >>> 0); }
   function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
-
   var WALL_TILE = (function(){
     var s = 256, c = document.createElement('canvas'); c.width = c.height = s;
     var g = c.getContext('2d'); g.fillStyle = WALL; g.fillRect(0, 0, s, s);
@@ -1436,21 +1300,15 @@ body{background:var(--wall);color:var(--ink)}
     g.putImageData(im, 0, 0);
     return c;
   })();
-
-  // ---------- the wall: every poster is a small picture of its own, placed and turned by the browser ----------
   var wall = document.getElementById('wall');
   var dusk = document.getElementById('dusk');
-  // The wall is a loop: about a thousand posters, then the same wall again from the top.
-  // A poster is drawn once; its picture is kept (as a compressed image where possible) and reused on every lap.
   var R = 144, PERIOD = 1;
   var VW = 0, VH = 0, TDPR = 1, base = 1, ph = 368, cols = 4, colW = 100, rowH = 100, RS = 1, EXT = 240;
   var rows = new Map(), pics = new Map(), shown = new Map();
   var started = false, rafId = 0, lastSY = 0, scrollDir = 1;
   var wallH = 0, wallTop = 0, CANVAS_MAX = 160, canvasCount = 0;
   var mouse = null, hoverIt = null, hoverRaf = 0, duskOp = '';
-  // position inside the wall, so a top inset (notched phones) never shifts hits or posters
   function wallScroll(){ return (window.scrollY || 0) - wallTop; }
-
   function clearWall(){
     shown.forEach(function(s){ if (s.el.parentNode) s.el.parentNode.removeChild(s.el); });
     shown.clear();
@@ -1474,7 +1332,6 @@ body{background:var(--wall);color:var(--ink)}
     clearWall();
     hoverIt = null;
   }
-
   function posterItem(id, ri, bri, x, r, filler){
     return { kind: 'p', key: 'p' + id, id: id, row: ri, lvlIdx: bri * cols, filler: filler, x: x,
       y: ri * rowH + (r() - 0.5) * rowH * 0.8, s: base * (0.9 + r() * 0.2), rot: (r() - 0.5) * (r() < 0.15 ? 0.52 : 0.21),
@@ -1483,7 +1340,6 @@ body{background:var(--wall);color:var(--ink)}
   function getRow(ri){
     var row = rows.get(ri);
     if (row) return row;
-    // every lap repeats the same R rows; only the vertical position moves on
     var bri = ((ri % R) + R) % R;
     var r = seeded(bri, 0x2c1b3c6d);
     var items = [], shift = (bri % 2) * colW * 0.5, c;
@@ -1498,8 +1354,6 @@ body{background:var(--wall);color:var(--ink)}
     rows.set(ri, items);
     return items;
   }
-
-  // every item whose paper reaches into the band [y0, y1), sorted back to front
   function itemsIn(y0, y1){
     var r0 = Math.floor((y0 - EXT) / rowH) - 1, r1 = Math.floor((y1 + EXT) / rowH) + 1;
     var list = [], mid = (y0 + y1) / 2, half = (y1 - y0) / 2 + EXT;
@@ -1510,10 +1364,6 @@ body{background:var(--wall);color:var(--ink)}
     list.sort(function(a, b){ return a.z - b.z; });
     return list;
   }
-
-  // ---------- background workers ----------
-  // Workers run the same CORE. Once they have the fonts, they draw whole posters and hand back small PNGs ("full").
-  // Without fonts there they only draw faces and compress posters drawn here ("faces"). Without workers, all is drawn here.
   function WORKER(){
     var C = null, E = null, SAMPLE = 'ПРОПАЛ ЧЕЛОВЕК Приметы абвгдеёжз 0123';
     function oc(w, h){ return new OffscreenCanvas(w, h); }
@@ -1570,7 +1420,6 @@ body{background:var(--wall);color:var(--ink)}
     workers = []; mode = 'none'; asked.clear(); packs.clear(); packWait = []; wanted.clear();
     schedule();
   }
-  // the page's own font files, read from the Google Fonts stylesheet, so workers can load the same fonts
   function fontList(){
     var out = [];
     try {
@@ -1597,7 +1446,6 @@ body{background:var(--wall);color:var(--ink)}
     var m = e.data; wHeard = true;
     if (m.t === 'fonts') {
       if (!m.ok) { fontReplies = -1000; return; }
-      // every worker has the fonts: from now on they draw whole posters, and what was drawn here keeps its place
       if (++fontReplies === workers.length && mode === 'faces') { mode = 'full'; schedule(); }
     } else if (m.t === 'face') {
       asked.delete(m.id);
@@ -1621,7 +1469,6 @@ body{background:var(--wall);color:var(--ink)}
       schedule();
     }
   }
-  // "full": ask a worker for the whole poster; false means it is on its way
   function askPoster(it){
     if (wanted.has(it.key)) return;
     if (wanted.size >= workers.length * 2) return;
@@ -1629,7 +1476,6 @@ body{background:var(--wall);color:var(--ink)}
     var slim = { kind: it.kind, id: it.id, lvlIdx: it.lvlIdx, filler: it.filler, sd: it.sd, bw: it.bw, bh: it.bh };
     workers[posterNext++ % workers.length].postMessage({ t: 'poster', id: it.key, it: slim, rs: RS, lap: ENV.lap, gen: gen });
   }
-  // "faces": true when the face can be drawn now; otherwise a worker is asked for it and the poster waits
   function faceReady(look, key, scale){
     var ck = key + '@' + scale;
     if (PCACHE.has(ck) || !workers.length) return true;
@@ -1642,10 +1488,8 @@ body{background:var(--wall);color:var(--ink)}
     workers[faceNext++ % nf].postMessage({ t: 'face', id: ck, look: look, key: key, scale: scale });
     return false;
   }
-  // a poster drawn here is handed to a worker to become a png (fast to make, light to show); the canvas is then let go
   function pack(pic){
     if (!workers.length || !packOK || pic.dead || !pic.cv) return;
-    // a few at a time, so compressing never crowds out drawing
     if (packs.size >= 3) { packWait.push(pic); return; }
     var id = ++packId;
     packs.set(id, pic);
@@ -1664,8 +1508,6 @@ body{background:var(--wall);color:var(--ink)}
     var swap = function(){ if (shown.get(pic.on) === s && s.el === cv && cv.parentNode) { wall.replaceChild(img, cv); s.el = img; } cv.width = 0; cv.height = 0; };
     if (img.decode) img.decode().then(swap, swap); else img.onload = swap;
   }
-
-  // ---------- drawing and placing posters ----------
   function drawItem(it){
     var d = it.kind === 'p' ? (it.d || (it.d = posterData(it.id, it.lvlIdx, it.filler))) : null;
     if (d && !faceReady(d.look, d.faceKey, photoScale(RS))) return null;
@@ -1681,7 +1523,6 @@ body{background:var(--wall);color:var(--ink)}
     img.src = url;
     return img;
   }
-  // about URL_MAX finished posters are kept (a few tens of MB); older ones that are off screen are redrawn if needed
   var URL_MAX = 500, urlCount = 0;
   function trimUrls(){
     if (urlCount <= URL_MAX) return;
@@ -1724,7 +1565,6 @@ body{background:var(--wall);color:var(--ink)}
     shown.set(id, { el: el, it: it });
     return true;
   }
-  // put up every poster that reaches into [y0, y1); new drawing stops once the budget (ms since t0) is spent
   function want(y0, y1, t0, budget){
     var list = itemsIn(y0, y1), missing = false;
     for (var j = 0; j < list.length; j++) {
@@ -1744,7 +1584,6 @@ body{background:var(--wall);color:var(--ink)}
     });
     if (rows.size > 400) { var r0 = Math.floor(y0 / rowH) - 4, r1 = Math.floor(y1 / rowH) + 4; rows.forEach(function(v, key){ if (key < r0 || key > r1) rows.delete(key); }); }
   }
-
   function hitAt(x, wy){
     var list = itemsIn(wy - 1, wy + 1);
     if (hoverIt && list.indexOf(hoverIt) >= 0) { list.splice(list.indexOf(hoverIt), 1); list.push(hoverIt); }
@@ -1757,8 +1596,6 @@ body{background:var(--wall);color:var(--ink)}
     }
     return null;
   }
-
-  // posters stay flat on the wall; only the cursor hints that a click opens one
   function updateHover(){
     hoverRaf = 0;
     var it = (started && mouse) ? hitAt(mouse.x, mouse.y + wallScroll()) : null;
@@ -1767,28 +1604,23 @@ body{background:var(--wall);color:var(--ink)}
     wall.style.cursor = it ? 'zoom-in' : 'default';
   }
   function scheduleHover(){ if (!hoverRaf) hoverRaf = requestAnimationFrame(updateHover); }
-
   function frame(){
     rafId = 0;
     var sy = wallScroll();
     if (sy !== lastSY) scrollDir = sy > lastSY ? 1 : -1;
     lastSY = sy;
     if (sy + VH * 5 > wallH) { wallH = sy + VH * 9; wall.style.height = Math.round(wallH) + 'px'; }
-    // darkness follows the lap: it deepens towards the end, then lifts just before the wall starts over
     var ph2 = ((sy % PERIOD) + PERIOD) % PERIOD / PERIOD;
     var sm = function(t){ t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
     var op = (0.25 + 0.5 * sm(ph2 / 0.85) * (1 - sm((ph2 - 0.92) / 0.08))).toFixed(2);
     if (op !== duskOp) { duskOp = op; dusk.style.opacity = op; }
     if (!started) return;
-    // what is on screen gets up to ~8 ms of new drawing per frame; anything still missing follows next frame
     if (want(sy, sy + VH, performance.now(), 8) && mode !== 'full') schedule();
     cull(sy - VH * 1.5 - EXT, sy + VH * 2.5 + EXT);
     if (mouse) scheduleHover();
     queueIdle();
   }
   function schedule(){ if (!rafId) rafId = requestAnimationFrame(frame); }
-
-  // posters just below (or above, going up) are prepared in spare moments
   var idleQueued = false;
   function queueIdle(){
     if (idleQueued) return;
@@ -1806,18 +1638,14 @@ body{background:var(--wall);color:var(--ink)}
     if (!more) more = want(behind[0], behind[1], t0, budget);
     if (more) queueIdle();
   }
-
   window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', function(){ relayout(false); schedule(); fitLB(); });
   wall.addEventListener('pointermove', function(e){ if (e.pointerType !== 'mouse') return; mouse = { x: e.clientX, y: e.clientY }; scheduleHover(); });
   wall.addEventListener('pointerleave', function(){ mouse = null; scheduleHover(); });
-
-  // ---------- reading one poster ----------
   var lb = document.getElementById('lb');
   var lbCanvas = document.getElementById('lbCanvas');
   var lbText = document.getElementById('lbText');
   var lbData = null;
-
   function srText(d){
     var parts = [d.header, d.kind === 'streamer' ? d.sur + ', ник закрашен' : d.sur + ' ' + d.nm, d.age, d.story, 'Приметы: ' + d.signs, d.clothesLabel + ' ' + d.clothes, d.contact + (d.phone ? ' Номер закрашен маркером.' : '')];
     if (d.note) parts.push('Приписка от руки: «' + d.note.text + '»' + (d.note.nick ? ', подпись ' + d.note.nick : ''));
@@ -1863,8 +1691,6 @@ body{background:var(--wall);color:var(--ink)}
     if (lb.hidden) return;
     if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeLB(); }
   });
-
-  // ---------- boot: wait briefly for the fonts so every poster is painted once, with the right type ----------
   var SAMPLE = 'ПРОПАЛ ЧЕЛОВЕК Приметы абвгдеёжз 0123';
   var FONT_SPECS = ['700 20px Oswald', '600 20px Oswald', '400 20px "PT Sans Narrow"', '700 20px "PT Sans Narrow"', '600 20px Caveat'];
   function whenFonts(){
@@ -1892,8 +1718,7 @@ body{background:var(--wall);color:var(--ink)}
   }
   if (hot && hot.snapshot) hot.snapshot(function(){ return { y: window.scrollY || 0, start: START }; });
   if (hot && hot.ready) hot.ready(boot); else boot((hot && hot.data) || {});
-})();
-</script>
+})();</script>
 
 </body>
 </html>
