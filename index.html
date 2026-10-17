@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Oswald:wght@600;700&family=PT+Sans+Narrow:wght@400;700&display=swap">
-<link rel="icon" type="image/png" href="free-icon-cross-15549412.png">
+<link rel="icon" type="image/png" href="favicon.ico">
 <style>
 :root{
   --wall:#1b1815;
@@ -35,6 +35,13 @@ body{background:var(--wall);color:var(--ink)}
 .lb{position:fixed;inset:0;z-index:5;background:rgba(8,6,5,.86);display:grid;place-items:center;padding:16px;cursor:zoom-out;outline:none}
 .lb canvas{display:block;transform:rotate(-1.2deg);max-width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.gate{position:fixed;inset:0;z-index:8;background:#000;display:grid;place-items:center;cursor:pointer;outline:none;transition:opacity .9s ease}
+.gate span{font:400 19px/1 var(--narrow);letter-spacing:.06em;color:#7d766d;animation:gl 3.2s ease-in-out infinite}
+.gate:focus-visible span{color:#b9b1a6}
+.gate.off{opacity:0;pointer-events:none}
+html.shut,html.shut body{overflow:hidden}
+@keyframes gl{0%,100%{opacity:.45}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.gate span{animation:none}}
 </style>
 </head>
 <body>
@@ -43,6 +50,7 @@ body{background:var(--wall);color:var(--ink)}
 
 <main id="wall" tabindex="0" role="img" aria-label="Стена, сплошь заклеенная объявлениями о пропавших людях. Нажмите на объявление, чтобы прочитать его."></main>
 <div class="dusk" id="dusk"></div>
+<div class="gate" id="gate" hidden role="button" tabindex="0" aria-label="Войти"><span>спаси нас</span></div>
 <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Объявление крупно. Нажмите в любом месте, чтобы закрыть." tabindex="-1">
   <canvas id="lbCanvas"></canvas>
   <p class="sr" id="lbText"></p>
@@ -1505,7 +1513,7 @@ body{background:var(--wall);color:var(--ink)}
     var s = pic.on ? shown.get(pic.on) : null;
     if (!s || s.el !== cv) { cv.width = 0; cv.height = 0; return; }
     var img = makeImg(url, cv.style.cssText);
-    var swap = function(){ if (shown.get(pic.on) === s && s.el === cv && cv.parentNode) { wall.replaceChild(img, cv); s.el = img; } cv.width = 0; cv.height = 0; };
+    var swap = function(){ if (shown.get(pic.on) === s && s.el === cv && cv.parentNode) { img.style.visibility = cv.style.visibility; wall.replaceChild(img, cv); s.el = img; } cv.width = 0; cv.height = 0; };
     if (img.decode) img.decode().then(swap, swap); else img.onload = swap;
   }
   function drawItem(it){
@@ -1557,12 +1565,14 @@ body{background:var(--wall);color:var(--ink)}
     }
     if (el === pic.cv) pic.on = id;
     var s = it.s, st = el.style;
+    st.visibility = '';
     st.width = (it.bw * s).toFixed(1) + 'px'; st.height = (it.bh * s).toFixed(1) + 'px';
     st.transformOrigin = (it.ox * s).toFixed(1) + 'px ' + (it.oy * s).toFixed(1) + 'px';
     st.transform = 'translate(' + (it.x - it.ox * s).toFixed(1) + 'px,' + (it.y - it.oy * s).toFixed(1) + 'px) rotate(' + it.rot.toFixed(4) + 'rad)';
     st.zIndex = String(Math.round((it.z + 1) * 1000));
     wall.appendChild(el);
     shown.set(id, { el: el, it: it });
+    if (it.kind === 'p') holdBack(id, el, it);
     return true;
   }
   function want(y0, y1, t0, budget){
@@ -1613,7 +1623,7 @@ body{background:var(--wall);color:var(--ink)}
     var ph2 = ((sy % PERIOD) + PERIOD) % PERIOD / PERIOD;
     var sm = function(t){ t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
     var op = (0.25 + 0.5 * sm(ph2 / 0.85) * (1 - sm((ph2 - 0.92) / 0.08))).toFixed(2);
-    if (op !== duskOp) { duskOp = op; dusk.style.opacity = op; }
+    if (op !== duskOp) { duskOp = op; dusk.style.opacity = op; if (SND) SND.depth((op - 0.25) / 0.5); }
     if (!started) return;
     if (want(sy, sy + VH, performance.now(), 8) && mode !== 'full') schedule();
     cull(sy - VH * 1.5 - EXT, sy + VH * 2.5 + EXT);
@@ -1669,10 +1679,12 @@ body{background:var(--wall);color:var(--ink)}
     lbText.textContent = srText(lbData);
     lb.hidden = false;
     fitLB();
+    if (SND) SND.listen(true);
     try { lb.focus({ preventScroll: true }); } catch (e) {}
   }
   function closeLB(){
     lb.hidden = true; lbData = null;
+    if (SND) SND.listen(false);
     try { wall.focus({ preventScroll: true }); } catch (e) {}
   }
   wall.addEventListener('click', function(e){
@@ -1691,6 +1703,182 @@ body{background:var(--wall);color:var(--ink)}
     if (lb.hidden) return;
     if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeLB(); }
   });
+  function SOUND(open){
+    var ctx = null, out, fade, bed, dark, subG, lampG, bus, noise, crk, on = false, quiet = false, deep = 0, flickT = 0;
+    var K = 0.075, BLIP = 0.3;
+    function gain(v){ var g = ctx.createGain(); g.gain.value = v; return g; }
+    function filt(type, f, q){ var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q || 0.707; return b; }
+    function chain(){ for (var i = 0; i < arguments.length - 1; i++) arguments[i].connect(arguments[i + 1]); return arguments[arguments.length - 1]; }
+    function wave(f, amps){
+      var re = new Float32Array(amps.length + 1), im = new Float32Array(amps.length + 1);
+      for (var i = 0; i < amps.length; i++) im[i + 1] = amps[i];
+      var o = ctx.createOscillator(); o.setPeriodicWave(ctx.createPeriodicWave(re, im)); o.frequency.value = f;
+      return o;
+    }
+    function loopNoise(){ var s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; return s; }
+    function gauss(){ return Math.sqrt(-2 * Math.log(Math.random() + 1e-9)) * Math.cos(2 * Math.PI * Math.random()); }
+    function build(){
+      ctx = open();
+      var sr = ctx.sampleRate, n = sr * 4, i, d;
+      noise = ctx.createBuffer(1, n, sr); d = noise.getChannelData(0);
+      for (i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      crk = ctx.createBuffer(1, 400, sr); d = crk.getChannelData(0);
+      for (i = 0; i < 400; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / 40);
+      var ir = ctx.createBuffer(2, Math.round(sr * 1.2), sr);
+      for (var c = 0; c < 2; c++) { d = ir.getChannelData(c); for (i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / sr * 5.75); }
+      var lim = ctx.createDynamicsCompressor();
+      lim.threshold.value = -10; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.25;
+      out = gain(1); chain(out, lim, ctx.destination);
+      dark = filt('lowpass', 9000, 0.6); fade = gain(0); bed = gain(1);
+      chain(bed, fade, dark, out);
+      var srcs = [];
+      var mains = wave(50, [0.25, 1, 0.35, 0.22, 0.1, 0.08, 0, 0.04]); chain(mains, gain(0.45 * K), bed); srcs.push(mains);
+      var motor = wave(49.2, [0.5, 0.2]); chain(motor, gain(0.4 * K), bed); srcs.push(motor);
+      var rum = loopNoise(), rg = gain(4.3 * K);
+      chain(rum, filt('lowpass', 140), filt('lowpass', 140), rg, bed); srcs.push(rum);
+      var rip = ctx.createOscillator(); rip.frequency.value = 24.6; chain(rip, gain(1.5 * K), rg.gain); srcs.push(rip);
+      var la = [], k; for (k = 1; k <= 50; k++) la.push(k < 9 ? 0 : 1 / Math.sqrt(k - 8));
+      var lamp = wave(100, la); lampG = gain(0.08 * K); chain(lamp, lampG, bed); srcs.push(lamp);
+      var room = loopNoise(); chain(room, filt('lowpass', 2500), gain(0.12 * K), bed); srcs.push(room);
+      var sub = ctx.createOscillator(); sub.frequency.value = 36; subG = gain(0); chain(sub, subG, out); srcs.push(sub);
+      var wob = ctx.createOscillator(); wob.frequency.value = 0.07; chain(wob, gain(2.2), sub.frequency); srcs.push(wob);
+      bus = filt('lowpass', 6000);
+      var conv = ctx.createConvolver(); conv.buffer = ir;
+      chain(bus, gain(0.8), out); chain(bus, conv, gain(0.3), out);
+      var t = ctx.currentTime;
+      srcs.forEach(function(s){ s.start(t, s.buffer ? Math.random() * 3 : 0); });
+    }
+    function tone(v, f, t, a, tau){
+      var o = ctx.createOscillator(), e = ctx.createGain();
+      o.frequency.value = f;
+      e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(a, t + 0.003); e.gain.setTargetAtTime(0, t + 0.003, tau);
+      chain(o, e, v);
+      o.start(t); o.stop(t + tau * 7 + 0.01);
+      return o;
+    }
+    function mix(){
+      if (!on) return;
+      var t = ctx.currentTime;
+      dark.frequency.setTargetAtTime(quiet ? 200 : 9000 * Math.pow(260 / 9000, deep), t, quiet ? 0.3 : 0.8);
+      bed.gain.setTargetAtTime(quiet ? 0.2 : 1 + 0.3 * deep, t, quiet ? 0.3 : 0.8);
+      subG.gain.setTargetAtTime(0.55 * K * deep * (quiet ? 0.3 : 1), t, 0.8);
+    }
+    function flicker(){
+      flickT = 0;
+      if (!on) return;
+      var t = ctx.currentTime + 0.05, L = 0.25 + Math.random() * 0.35, base = 0.08 * K;
+      for (var s = 0; s < L; s += 0.009) lampG.gain.setValueAtTime(base * (Math.random() < 0.5 ? 0.15 : 1), t + s);
+      lampG.gain.setValueAtTime(base, t + L);
+      var hpf = filt('highpass', 2000), cg = gain(0.6 * K); chain(hpf, cg, bed);
+      for (var i = 0, m = 4 + Math.floor(Math.random() * 6); i < m; i++) {
+        var b = ctx.createBufferSource(); b.buffer = crk; b.connect(hpf); b.start(t + Math.random() * L);
+      }
+      setTimeout(function(){ cg.disconnect(); }, (L + 1) * 1000);
+      flickT = setTimeout(flicker, 9000 + Math.random() * 16000);
+    }
+    return {
+      arm: function(cb){
+        try { build(); } catch (e) { ctx = null; cb(null); return; }
+        if (ctx.state === 'running') { cb(true); return; }
+        var done = false, fin = function(ok){ if (!done) { done = true; cb(ok); } };
+        var pol = navigator.getAutoplayPolicy ? navigator.getAutoplayPolicy(ctx) : '';
+        if (pol === 'disallowed') { fin(false); return; }
+        try { ctx.resume().then(function(){ fin(ctx.state === 'running'); }, function(){ fin(false); }); } catch (e) { fin(false); }
+        setTimeout(function(){ fin(ctx.state === 'running'); }, 350);
+      },
+      unlock: function(){ if (ctx && ctx.state !== 'running') { try { ctx.resume().catch(function(){}); } catch (e) {} } },
+      hum: function(){
+        if (!ctx || on) return;
+        on = true;
+        var t = ctx.currentTime + 0.05;
+        fade.gain.setValueAtTime(0, t); fade.gain.linearRampToValueAtTime(1, t + 1.6);
+        mix();
+        flickT = setTimeout(flicker, 7000 + Math.random() * 8000);
+      },
+      blip: function(g){
+        if (!on || quiet) return;
+        var t = ctx.currentTime + 0.005, p = Math.pow(2, clamp(gauss() * 0.25, -0.6, 0.6)), f0 = 1046.5 * p, f1 = 1568 * p;
+        var v = gain(BLIP * g); v.connect(bus);
+        tone(v, f0, t, 0.8, 0.06); tone(v, 2 * f1, t, 0.25, 0.05);
+        tone(v, f1, t + 0.07, 1, 0.12).onended = function(){ v.disconnect(); };
+      },
+      depth: function(d){ d = clamp(d, 0, 1); if (Math.abs(d - deep) < 0.01) return; deep = d; mix(); },
+      listen: function(q){ quiet = !!q; mix(); },
+      hidden: function(h){ if (!on || !ctx.suspend) return; (h ? ctx.suspend() : ctx.resume()).catch(function(){}); },
+      ctx: function(){ return ctx; }
+    };
+  }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var SND = AC ? SOUND(function(){ return new AC(); }) : null;
+  var gate = document.getElementById('gate');
+  var spawn = !!SND, live = false, held = [], putUp = 0, nextAt = 0, lastHeld = 0, spawnRaf = 0;
+  function holdBack(id, el, it){
+    if (!spawn) return;
+    var sy = wallScroll();
+    if (Math.abs(it.y - (sy + VH / 2)) > VH / 2 + it.bh * it.s * 0.5) return;
+    el.style.visibility = 'hidden';
+    held.push(id); lastHeld = performance.now();
+    if (live) runSpawn();
+  }
+  function reveal(id){
+    var s = shown.get(id);
+    if (s) s.el.style.visibility = '';
+    return !!s;
+  }
+  function endSpawn(){
+    spawn = false;
+    held.forEach(reveal); held = [];
+    if (spawnRaf) { cancelAnimationFrame(spawnRaf); spawnRaf = 0; }
+  }
+  function runSpawn(){ if (!spawnRaf) spawnRaf = requestAnimationFrame(spawnTick); }
+  function spawnTick(){
+    spawnRaf = 0;
+    if (!spawn) return;
+    var now = performance.now();
+    if (!nextAt) nextAt = now;
+    while (held.length && now >= nextAt) {
+      if (reveal(held.shift())) {
+        if (SND) SND.blip((0.35 + 0.65 * Math.min(1, putUp / 30)) * (0.5 + Math.random() * 0.5));
+        putUp++;
+        nextAt = Math.max(nextAt, now - 20) + Math.max(35, 380 * Math.pow(0.88, putUp));
+      }
+    }
+    if (!held.length) {
+      if (nextAt < now) nextAt = now;
+      if (putUp && now - lastHeld > 900) { endSpawn(); return; }
+    }
+    runSpawn();
+  }
+  function goLive(){
+    if (live) return;
+    live = true;
+    if (SND) SND.hum();
+    document.documentElement.classList.remove('shut');
+    setTimeout(function(){ nextAt = 0; runSpawn(); }, 900);
+    setTimeout(function(){ if (spawn && !putUp) endSpawn(); }, 12000);
+  }
+  function openGate(e){
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (SND) SND.unlock();
+    gate.classList.add('off');
+    setTimeout(function(){ gate.hidden = true; }, 950);
+    goLive();
+  }
+  function armSound(){
+    if (!SND) { goLive(); return; }
+    document.documentElement.classList.add('shut');
+    SND.arm(function(ok){
+      if (ok === null) { SND = null; document.documentElement.classList.remove('shut'); endSpawn(); live = true; return; }
+      if (ok) { goLive(); return; }
+      gate.hidden = false;
+      try { gate.focus({ preventScroll: true }); } catch (err) {}
+      gate.addEventListener('click', openGate);
+      gate.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ') openGate(e); });
+      gate.addEventListener('touchend', openGate);
+    });
+  }
+  window.addEventListener('scroll', function(){ if (live && spawn && putUp) endSpawn(); }, { passive: true });
+  if (SND) document.addEventListener('visibilitychange', function(){ SND.hidden(document.hidden); });
   var SAMPLE = 'ПРОПАЛ ЧЕЛОВЕК Приметы абвгдеёжз 0123';
   var FONT_SPECS = ['700 20px Oswald', '600 20px Oswald', '400 20px "PT Sans Narrow"', '700 20px "PT Sans Narrow"', '600 20px Caveat'];
   function whenFonts(){
@@ -1705,6 +1893,7 @@ body{background:var(--wall);color:var(--ink)}
     wallH = Math.max(window.innerHeight * 9, y0 + window.innerHeight * 9);
     wall.style.height = Math.round(wallH) + 'px';
     startWorkers();
+    armSound();
     relayout(true);
     if (y0) window.scrollTo(0, y0);
     frame();
